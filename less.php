@@ -83,10 +83,10 @@ class plgSystemLess extends JPlugin
 			$templatePath = JPATH_BASE . DIRECTORY_SEPARATOR . 'templates/' . $this->app->getTemplate() . DIRECTORY_SEPARATOR;
 
 			//entrypoint for main .less file, default is less/template.less
-			$lessFile = $templatePath . $this->params->get('lessfile', 'less/template.less');
+			$lessFile = $this->params->get('lessfile', 'less/template.less');
 
 			//destination .css file, default css/template.css
-			$cssFile = $templatePath . $this->params->get('cssfile', 'css/template.css');
+			$cssFile = $this->params->get('cssfile', 'css/template.css');
 
 		}
 
@@ -96,32 +96,46 @@ class plgSystemLess extends JPlugin
 			$templatePath = JPATH_ADMINISTRATOR . DIRECTORY_SEPARATOR . 'templates/' . $this->app->getTemplate() . DIRECTORY_SEPARATOR;
 
 			//entrypoint for main .less file, default is less/template.less
-			$lessFile = $templatePath . $this->params->get('admin_lessfile', 'less/template.less');
+			$lessFile = $this->params->get('admin_lessfile', 'less/template.less');
 
 			//destination .css file, default css/template.css
-			$cssFile = $templatePath . $this->params->get('admin_cssfile', 'css/template.css');
+			$cssFile = $this->params->get('admin_cssfile', 'css/template.css');
 
 		}
 
-		//check if .less file exists and is readable
-		if (is_readable($lessFile))
+		// try to split input / output files
+		$lessFiles = explode(',',$lessFile);
+		$cssFiles = explode(',',$cssFile);
+
+		for($i=0; $i<count($lessFiles); $i++)
 		{
-			if ((bool) $this->params->get('clientside_enable', 0))
+			// no more outputFiles found, abort further tries.
+			if(!isset($cssFiles[$i])) break;
+
+			$lessFile = $templatePath . trim($lessFiles[$i]);
+			$cssFile = $templatePath . trim($cssFiles[$i]);
+
+			//check if .less file exists and is readable
+			if (is_readable($lessFile))
 			{
-				$this->clientsideLess();
-			}
-			else
-			{
-				//initialse less compiler
-				try
+				if ((bool) $this->params->get('clientside_enable', 0))
 				{
-					$this->autoCompileLess($lessFile, $cssFile);
+					echo 'lessphp error: clientside compilation is not available for this version.';
 				}
-				catch (Exception $e)
+				else
 				{
-					echo "lessphp error: " . $e->getMessage();
+					//initialse less compiler
+					try
+					{
+						$this->autoCompileLess($lessFile, $cssFile);
+					}
+					catch (Exception $e)
+					{
+						echo "lessphp error (at ".$lessFiles[$i]."): " . $e->getMessage();
+					}
 				}
 			}
+
 		}
 
 		return false;
@@ -203,126 +217,126 @@ class plgSystemLess extends JPlugin
 	 *
 	 * @see      LESS: Ussage  http://lesscss.org/#usage
 	 */
-	function clientsideLess()
-	{
-		// Initialise variables
-		$doc = JFactory::getDocument();
-
-
-		// Early exit
-		if ($doc->getType() !== 'html')
-		{
-			return;
-		}
-
-		// Get asset paths
-		$templateRel = 'templates/' . $doc->template . '/';
-		$templateUri = JUri::base() . $templateRel;
-
-
-		// Determine which param to use (admin/ site)
-		$mode = $this->params->get('mode', 0);
-		$lessKey = 'lessfile';
-		$cssKey = 'cssfile';
-
-		if ($this->app->isAdmin() && ($mode == 1 || $mode == 2))
-		{
-			$lessKey = 'admin_' . $lessKey;
-			$cssKey = 'admin_' . $cssKey;
-		}
-
-
-		// Get template css filenames
-		$lessUri = $templateRel . $this->params->get($lessKey, 'less/template.less');
-		$cssUri = $templateRel . $this->params->get($cssKey, 'css/template.css');
-
-
-		// Add less file to document
-		$doc->addHeadLink($lessUri, 'stylesheet/less', 'rel', array('type' => 'text/css'));
-
-		/*
-		 * Configure Less options
-		 *  async			: false,
-		 *  fileAsync		: false,
-		 *  poll			: 1500,
-		 *  relativeUrls	: false,
-		 *  rootpath		: $templateUrl
-		 */
-		$options = array(
-			'env' => 'development',
-			'dumpLineNumbers' => 'mediaquery', // default: 'comments'
-		);
-
-		$doc->addScriptDeclaration('
-				// Less options
-				var less = ' . json_encode($options, JSON_FORCE_OBJECT | (defined('JSON_PRETTY_PRINT') ? JSON_PRETTY_PRINT : false)) . ';
-		');
-
-
-		// Load less.js (pick latest version in media folder)
-		// Joomla adds JS code after libraries in head. We need it other way around
-		$mediaJsDestination = '/media/plg_less/js/';
-		$mediaPath = JPATH_SITE . $mediaJsDestination;
-		$mediaUri = JUri::root(true) . $mediaJsDestination;
-
-		$lessVersions = glob($mediaPath . 'less-*.js');
-
-		if (!empty($lessVersions))
-		{
-			rsort($lessVersions);
-
-			// Load at the end of head
-			$doc->addCustomTag('<script src="' . $mediaUri . basename($lessVersions[0]) . '" type="text/javascript"></script>');
-
-			// Load after options (experimental, cannot use in XHTML documents)
-			/*
-				$doc->addScriptDeclaration('
-						// Less library
-						document.write( unescape( \'%3Cscript src="' . $mediaUri . basename($lessVersions[0]) . '" type="text/javascript"%3E%3C/script%3E\' ) );
-				');
-			*/
-		}
-		// Cannot find client-side parser
-		else
-		{
-			return;
-		}
-
-
-		/*
-		 * Remove template.css from document head
-		 *
-		 * Note:  Css file must be added either using `JFactory::getDocument->addStylesheet($cssFile)` or `JHtml::_('stylesheet', $cssFile)`
-		 * Note:  Cannot rely on removing stylesheet using JDocumentHTML methods.
-		 * Note:  Passes ignore cache trick (template.css?1234567890123)
-		 * Note:  Template.css may be added to $doc['stylesheets'] using following keys:
-		 *	- relative						: `templates/...`
-		 *	- semi		JUri::base(true)	: `/[path-to-root]/templates/...`
-		 * 	- absolute 	JUri::base()		: `http://[host]/[path-to-root]/templates/...`
-		 *	- or outside $doc->_styleSheets
-		 */
-		$lookups = array($cssUri, JUri::base(true) . '/' . $cssUri, JUri::base() . $cssUri);
-
-		// Loop trough all registered document stylesheets...
-		foreach ($doc->_styleSheets as $stylesSheetUri => $styleSheetInfo)
-		{
-			// ...and compare to every lookup...
-			foreach ($lookups as $lookup)
-			{
-				// ...that starts like a lookup
-				if (strpos($stylesSheetUri, $lookup) === 0)
-				{
-					unset($doc->_styleSheets[$stylesSheetUri]);
-					return;
-				}
-			}
-		}
-
-		// Didn't find a css file in JDocument instance, register event to remove in from rendered html body.
-		$this->app->registerEvent('onAfterRender', array($this, 'removeCss'));
-
-		return;
-	}
+	// function clientsideLess()
+	// {
+	// 	// Initialise variables
+	// 	$doc = JFactory::getDocument();
+	//
+	//
+	// 	// Early exit
+	// 	if ($doc->getType() !== 'html')
+	// 	{
+	// 		return;
+	// 	}
+	//
+	// 	// Get asset paths
+	// 	$templateRel = 'templates/' . $doc->template . '/';
+	// 	$templateUri = JUri::base() . $templateRel;
+	//
+	//
+	// 	// Determine which param to use (admin/ site)
+	// 	$mode = $this->params->get('mode', 0);
+	// 	$lessKey = 'lessfile';
+	// 	$cssKey = 'cssfile';
+	//
+	// 	if ($this->app->isAdmin() && ($mode == 1 || $mode == 2))
+	// 	{
+	// 		$lessKey = 'admin_' . $lessKey;
+	// 		$cssKey = 'admin_' . $cssKey;
+	// 	}
+	//
+	//
+	// 	// Get template css filenames
+	// 	$lessUri = $templateRel . $this->params->get($lessKey, 'less/template.less');
+	// 	$cssUri = $templateRel . $this->params->get($cssKey, 'css/template.css');
+	//
+	//
+	// 	// Add less file to document
+	// 	$doc->addHeadLink($lessUri, 'stylesheet/less', 'rel', array('type' => 'text/css'));
+	//
+	// 	/*
+	// 	 * Configure Less options
+	// 	 *  async			: false,
+	// 	 *  fileAsync		: false,
+	// 	 *  poll			: 1500,
+	// 	 *  relativeUrls	: false,
+	// 	 *  rootpath		: $templateUrl
+	// 	 */
+	// 	$options = array(
+	// 		'env' => 'development',
+	// 		'dumpLineNumbers' => 'mediaquery', // default: 'comments'
+	// 	);
+	//
+	// 	$doc->addScriptDeclaration('
+	// 			// Less options
+	// 			var less = ' . json_encode($options, JSON_FORCE_OBJECT | (defined('JSON_PRETTY_PRINT') ? JSON_PRETTY_PRINT : false)) . ';
+	// 	');
+	//
+	//
+	// 	// Load less.js (pick latest version in media folder)
+	// 	// Joomla adds JS code after libraries in head. We need it other way around
+	// 	$mediaJsDestination = '/media/plg_less/js/';
+	// 	$mediaPath = JPATH_SITE . $mediaJsDestination;
+	// 	$mediaUri = JUri::root(true) . $mediaJsDestination;
+	//
+	// 	$lessVersions = glob($mediaPath . 'less-*.js');
+	//
+	// 	if (!empty($lessVersions))
+	// 	{
+	// 		rsort($lessVersions);
+	//
+	// 		// Load at the end of head
+	// 		$doc->addCustomTag('<script src="' . $mediaUri . basename($lessVersions[0]) . '" type="text/javascript"></script>');
+	//
+	// 		// Load after options (experimental, cannot use in XHTML documents)
+	// 		/*
+	// 			$doc->addScriptDeclaration('
+	// 					// Less library
+	// 					document.write( unescape( \'%3Cscript src="' . $mediaUri . basename($lessVersions[0]) . '" type="text/javascript"%3E%3C/script%3E\' ) );
+	// 			');
+	// 		*/
+	// 	}
+	// 	// Cannot find client-side parser
+	// 	else
+	// 	{
+	// 		return;
+	// 	}
+	//
+	//
+	// 	/*
+	// 	 * Remove template.css from document head
+	// 	 *
+	// 	 * Note:  Css file must be added either using `JFactory::getDocument->addStylesheet($cssFile)` or `JHtml::_('stylesheet', $cssFile)`
+	// 	 * Note:  Cannot rely on removing stylesheet using JDocumentHTML methods.
+	// 	 * Note:  Passes ignore cache trick (template.css?1234567890123)
+	// 	 * Note:  Template.css may be added to $doc['stylesheets'] using following keys:
+	// 	 *	- relative						: `templates/...`
+	// 	 *	- semi		JUri::base(true)	: `/[path-to-root]/templates/...`
+	// 	 * 	- absolute 	JUri::base()		: `http://[host]/[path-to-root]/templates/...`
+	// 	 *	- or outside $doc->_styleSheets
+	// 	 */
+	// 	$lookups = array($cssUri, JUri::base(true) . '/' . $cssUri, JUri::base() . $cssUri);
+	//
+	// 	// Loop trough all registered document stylesheets...
+	// 	foreach ($doc->_styleSheets as $stylesSheetUri => $styleSheetInfo)
+	// 	{
+	// 		// ...and compare to every lookup...
+	// 		foreach ($lookups as $lookup)
+	// 		{
+	// 			// ...that starts like a lookup
+	// 			if (strpos($stylesSheetUri, $lookup) === 0)
+	// 			{
+	// 				unset($doc->_styleSheets[$stylesSheetUri]);
+	// 				return;
+	// 			}
+	// 		}
+	// 	}
+	//
+	// 	// Didn't find a css file in JDocument instance, register event to remove in from rendered html body.
+	// 	$this->app->registerEvent('onAfterRender', array($this, 'removeCss'));
+	//
+	// 	return;
+	// }
 
 	/**
 	 * Remove template.css from document html

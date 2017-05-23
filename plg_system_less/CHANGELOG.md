@@ -1,3 +1,6 @@
+## Version 0.8.2 Stable (2015-09-15)
++ Custom version by Jannik Mewes - supports multiple input / output files. Separate by comma.
+
 ## Version 0.8.1 Stable (2015-09-15)
 + fix issue #30: less.php v1.7.0.3 not supporting custom formatters, using "classic instead"
 
@@ -31,4 +34,3 @@
 + changed versioning to work with joomla update functions
 + added russian translation, thanks to Pazys
 + added update server for one-click updates from joomla backend
-
