@@ -89,9 +89,8 @@ class plgSystemLess extends JPlugin
 			$cssFile = $this->params->get('cssfile', 'css/template.css');
 
 		}
-
 		//execute backend
-		if ($this->app->isAdmin() && ($mode == 1 || $mode == 2))
+		else if ($this->app->isAdmin() && ($mode == 1 || $mode == 2))
 		{
 			$templatePath = JPATH_ADMINISTRATOR . DIRECTORY_SEPARATOR . 'templates/' . $this->app->getTemplate() . DIRECTORY_SEPARATOR;
 
@@ -102,10 +101,14 @@ class plgSystemLess extends JPlugin
 			$cssFile = $this->params->get('admin_cssfile', 'css/template.css');
 
 		}
+		else
+		{
+			return false;
+		}
 
 		// try to split input / output files
-		$lessFiles = explode($lessFile,',');
-		$cssFiles = explode($cssFile,',');
+		$lessFiles = explode(',',$lessFile);
+		$cssFiles = explode(',',$cssFile);
 
 		for($i=0; $i<count($lessFiles); $i++)
 		{
